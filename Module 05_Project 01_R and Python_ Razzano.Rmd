@@ -1,0 +1,463 @@
+---
+title: "Module 05_Project 01_DSE 5002 R and Python Programming"
+author: "Anthony V. Razzano, DHA"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com/"))  # Set CRAN mirror
+```
+
+### Executive Summary
+
+The CEO of your company has decided to hire a full-time data scientist, with the potential to build a future team. She is unsure of the appropriate salary range due to wide variations in global pay, coupled with rising wages caused by the economic recession and a competitive job market. She requests an analysis of data science salaries to establish a competitive range, particularly comparing the U.S. and offshore markets.
+
+The company is small but rapidly growing, and the role can be remote. The CEO expects a presentation with visuals to communicate salary recommendations, and the R code should be delivered as a flat file for submission.
+
+Metadata for the analysis includes:
+- Work year, experience level, employment type, job title
+- Salary details (total and in USD), employee residence
+- Remote work percentage, company location, and company size (small, medium, large)
+
+The deliverables include:
+A PowerPoint presentation for the CEO with visualizations and analysis.
+An R script for the analysis but without showing code in the presentation.
+
+
+## R code for the analysis
+
+```{r}
+
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(caret)
+library(randomForest)
+library(broom)
+library(cluster)
+library(factoextra)
+library(tidyr)
+library(corrplot)
+library(e1071)  # For SVM
+library(pROC)   # For ROC curve
+
+# ========================
+# 1. Meeting with Subject Matter Experts (Business Stakeholders)
+# ========================
+# Define business questions
+# What salary ranges should we offer to remain competitive?
+# How do U.S. salaries compare with offshore salaries?
+# How does experience level influence salary?
+# Should remote work impact salary decisions?
+
+# ========================
+# 2. Data Collection & Ethics
+# ========================
+# Use internal CSV data file.
+# Consider data privacy, anonymize personal data, and ensure ethical data handling.
+
+# Read the CSV file
+data <- read.csv("C:/Users/AVR15/Documents/r project data.csv")
+
+# Convert relevant columns to factors
+data <- data %>%
+  mutate(
+    experience_level = as.factor(experience_level),
+    employment_type = as.factor(employment_type),
+    job_title = as.factor(job_title),
+    employee_residence = as.factor(employee_residence),
+    company_location = as.factor(company_location),
+    company_size = as.factor(company_size),
+    remote_ratio = as.factor(remote_ratio)
+  )
+
+# ========================
+# 3. Data Quality Check and Cleaning
+# ========================
+
+# Check for missing values and remove them
+data_clean <- na.omit(data)
+
+# Summary statistics
+summary(data_clean)
+
+# ========================
+# 4. Exploratory Data Analysis (EDA)
+# ========================
+
+# Salary distribution by experience level (Boxplot)
+ggplot(data_clean, aes(x = experience_level, y = salary_in_usd)) +
+  geom_boxplot(fill = "lightblue", color = "black") +
+  labs(title = "Salary Distribution by Experience Level", x = "Experience Level", y = "Salary in USD") +
+  theme_minimal()
+
+# salary distribution across different experience levels visualized with boxplot. Visual reveals that salaries increase with experience; entry-level (EN) positions show the lowest median salaries. Executive-level (EX) positions had the highest; This suggests a strong correlation between experience and salary levels, which sounds accurate within the competitive employment environment; more experienced individuals tend to command higher pay.
+  
+
+# Average salary by company location (US vs Offshore)
+data_clean <- data_clean %>%
+  mutate(is_US = ifelse(company_location == "US", "US", "Offshore"))
+
+ggplot(data_clean, aes(x = factor(is_US), y = salary_in_usd, fill = is_US)) +
+  geom_bar(stat = "summary", fun = "mean", color = "black", width = 0.7) +
+  labs(title = "Average Salary: US vs Offshore", x = "Location", y = "Average Salary in USD") +
+  scale_fill_manual(values = c("Offshore" = "gray", "US" = "lightblue")) +
+  theme_minimal()
+
+# Comparison of average salaries between U.S.-based and offshore employees illustrated through a bar plot. The bar plot indicates that U.S. salaries are significantly higher than those of offshore employees, over 50% higher. The result highlights a geographical disparity in salary expectations.
+
+# Correlation plot to explore relationships between numerical variables
+numeric_data <- data_clean %>%
+  select(salary_in_usd, work_year)
+
+corr_matrix <- cor(numeric_data)
+corrplot(corr_matrix, method = "circle")
+
+# Correlation plot used to examine the relationship between salary and work year. The analysis shows a weak correlation between these two variables, suggesting that factors other than work year are likely more influential in determining salary levels.
+
+# Remote work ratio vs Salary (Barplot)
+ggplot(data_clean, aes(x = remote_ratio, y = salary_in_usd, fill = remote_ratio)) +
+  geom_bar(stat = "summary", fun = "mean", color = "black") +
+  labs(title = "Average Salary by Remote Work Ratio", x = "Remote Ratio", y = "Salary in USD") +
+  scale_fill_manual(values = c("0" = "lightgray", "50" = "lightblue", "100" = "darkblue")) +
+  theme_minimal()
+
+# Barplot was used to analyze the relationship between the remote work ratio and salary. The results revealed that fully remote positions (100% remote) tend to have the highest salaries, suggesting that companies offering remote work opportunities may attract higher-paid talent.
+
+# ========================
+# Additional Exploratory Analyses
+# ========================
+
+# Salary distribution by company size (Boxplot)
+ggplot(data_clean, aes(x = company_size, y = salary_in_usd, fill = company_size)) +
+  geom_boxplot() +
+  labs(title = "Salary Distribution by Company Size", x = "Company Size", y = "Salary in USD") +
+  theme_minimal()
+
+# The distribution of salaries by company size performed through a boxplot. The result revealed that larger companies (L) tend to offer higher salaries compared to medium (M) and small (S) companies, highlighting that company size is a notable factor in salary determination.
+
+# Average salary by job title (Barplot)
+ggplot(data_clean, aes(x = reorder(job_title, -salary_in_usd), y = salary_in_usd, fill = job_title)) +
+  geom_bar(stat = "summary", fun = "mean", color = "black") +
+  labs(title = "Average Salary by Job Title", x = "Job Title", y = "Average Salary in USD") +
+  theme_minimal() +
+  coord_flip()  # Flip the coordinates for better readability
+
+# Variation in salaries by job title was performed through a barplot with flipped coordinates for better readability. The results showed significant differences across job titles, with roles such as Principal Data Scientist and Director of Data Science at the higher end of the pay scale.
+
+# ========================
+# 5. Combined Dataset for Consistent Factor Levels
+# ========================
+
+set.seed(123)  # Set a seed for reproducibility
+trainIndex <- createDataPartition(data_clean$salary_in_usd, p = 0.8, list = FALSE)
+train_data <- data_clean[trainIndex, ]
+test_data <- data_clean[-trainIndex, ]
+
+# ========================
+# 6. Linear Regression Model
+# ========================
+
+# Create dummy variables for training data
+train_dummies <- model.matrix(salary_in_usd ~ experience_level + employment_type + 
+                                remote_ratio + company_location + company_size, 
+                                data = train_data)[, -1]  # Exclude intercept
+
+# Fit a linear regression model
+lm_model <- lm(train_data$salary_in_usd ~ ., data = as.data.frame(train_dummies))
+
+# Summary of the linear regression model
+summary(lm_model)
+
+# Tidy up the output for a clearer view of coefficients
+tidy_lm <- tidy(lm_model)
+print(tidy_lm)
+
+# The linear regression model illustrated experience level and employment type as significant predictors of salary. Variables such as the remote work ratio and company location had less influence on salary prediction.
+
+# visualizing
+
+ggplot(tidy_lm, aes(x = reorder(term, estimate), y = estimate)) +
+  geom_point(color = "gray", size = 3) +  # Neutral gray color for points
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), 
+                width = 0.2, color = "lightgray") +  # Light gray for error bars
+  labs(title = "Linear Regression Coefficients",
+       x = "Predictors",
+       y = "Coefficient Estimate") +
+  coord_flip() +  # Flip coordinates for better readability
+  theme_minimal()  # Use a minimal theme for a clean look
+
+# ========================
+# Actual vs. Predicted Salaries
+# ========================
+# Predictions on test data
+# Create dummy variables for the test dataset to ensure consistency with the model training data
+test_dummies <- model.matrix(~ experience_level + employment_type + 
+                               remote_ratio + company_location + company_size, 
+                               data = test_data)[, -1]  # Exclude intercept
+
+# Use the linear model to predict salaries based on the test data
+lm_predictions <- predict(lm_model, newdata = as.data.frame(test_dummies))
+
+# Create a data frame for plotting actual vs. predicted results
+results_df <- data.frame(Actual = test_data$salary_in_usd, Predicted = lm_predictions)
+
+# Plot actual vs. predicted salaries
+# This scatter plot helps visualize how well the model's predictions align with actual salaries.
+ggplot(results_df, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "darkgray", alpha = 0.5) +  # Use dark gray for points with some transparency
+  geom_abline(slope = 1, intercept = 0, color = "lightgray") +  # Light gray line for 45-degree reference
+  labs(title = "Actual vs. Predicted Salaries",
+       x = "Actual Salaries (USD)",
+       y = "Predicted Salaries (USD)") +
+  theme_minimal()  # Use a minimal theme for a clean look
+
+# ========================
+# Residuals Plot
+# ========================
+# Calculate residuals (the difference between actual and predicted salaries)
+results_df$Residuals <- results_df$Actual - results_df$Predicted
+
+# Plot residuals vs. predicted salaries
+# This plot helps assess the model's performance by visualizing the residuals.
+# Ideally, the residuals should be randomly distributed around zero.
+ggplot(results_df, aes(x = Predicted, y = Residuals)) +
+  geom_point(color = "darkgray", alpha = 0.5) +  # Use dark gray for points with some transparency
+  geom_hline(yintercept = 0, color = "lightgray") +  # Light gray horizontal line at y=0
+  labs(title = "Residuals vs. Predicted Salaries",
+       x = "Predicted Salaries (USD)",
+       y = "Residuals (USD)") +
+  theme_minimal()  # Use a minimal theme for a clean look
+
+# ========================
+# 7. Random Forest Model
+# ========================
+
+# Random Forest model training
+rf_model <- randomForest(salary_in_usd ~ experience_level + employment_type + 
+                           remote_ratio + company_location + company_size, 
+                           data = train_data, importance = TRUE)
+
+# Model performance on training data
+rf_predictions_train <- predict(rf_model, train_data)
+rf_rmse_train <- RMSE(rf_predictions_train, train_data$salary_in_usd)
+cat(paste0("Random Forest RMSE (Train): ", round(rf_rmse_train, 2), "\n"))
+
+# Predictions on test data
+rf_predictions <- predict(rf_model, test_data)
+rf_rmse_test <- RMSE(rf_predictions, test_data$salary_in_usd)
+rf_r2_test <- R2(rf_predictions, test_data$salary_in_usd)
+
+# Print model performance metrics
+cat(paste0("Random Forest RMSE (Test): ", round(rf_rmse_test, 2), "\n"))
+cat(paste0("Random Forest R-squared (Test): ", round(rf_r2_test, 2), "\n"))
+
+# Variable importance plot
+varImpPlot(rf_model)
+
+# The Random Forest model performed sufficiently; it achieved an RMSE of 56,236.54 on the test data, identifying experience level and employment type as the most important variables in predicting salary.
+
+# ========================
+# 8. Support Vector Machine Model
+# ========================
+
+# Scale the training data for SVM
+train_data_scaled <- scale(train_data %>% select(salary_in_usd, work_year))
+
+# SVM model training
+svm_model <- svm(salary_in_usd ~ experience_level + employment_type + 
+                   remote_ratio + company_location + company_size, 
+                   data = train_data)
+
+# Predictions on test data
+svm_predictions <- predict(svm_model, test_data)
+svm_rmse <- RMSE(svm_predictions, test_data$salary_in_usd)
+
+# Print SVM model performance
+cat(paste0("SVM RMSE: ", round(svm_rmse, 2), "\n"))
+
+# Visualize for powerpoint
+
+# Scale the training data for SVM
+train_data_scaled <- scale(train_data %>% select(salary_in_usd, work_year))
+
+# SVM model training
+svm_model <- svm(salary_in_usd ~ experience_level + employment_type + 
+                   remote_ratio + company_location + company_size, 
+                 data = train_data)
+
+# Predictions on test data
+svm_predictions <- predict(svm_model, test_data)
+
+# Calculate residuals
+svm_residuals <- test_data$salary_in_usd - svm_predictions
+
+# Plot 1: Actual vs Predicted Salaries
+ggplot(data.frame(Actual = test_data$salary_in_usd, Predicted = svm_predictions), 
+       aes(x = Actual, y = Predicted)) +
+  geom_point(color = "darkblue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "SVM: Actual vs Predicted Salaries",
+       x = "Actual Salary (USD)",
+       y = "Predicted Salary (USD)") +
+  theme_minimal()
+
+# Plot 2: Residuals vs Predicted Salaries
+ggplot(data.frame(Predicted = svm_predictions, Residuals = svm_residuals), 
+       aes(x = Predicted, y = Residuals)) +
+  geom_point(color = "darkgreen", alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "SVM: Residuals vs Predicted Salaries",
+       x = "Predicted Salary (USD)",
+       y = "Residuals (USD)") +
+  theme_minimal()
+
+# SVM RMSE output
+cat(paste0("SVM RMSE: ", round(svm_rmse, 2), "\n"))
+
+# The SVM model had a higher RMSE of 69,950.19, indicating lower accuracy than the Random Forest model; may not be optimal as a model for this analysis.
+
+# ========================
+# 9. Model Evaluation (Linear Regression)
+# ========================
+
+# Create dummy variables for test data using the same structure
+test_dummies <- model.matrix(~ experience_level + employment_type + 
+                               remote_ratio + company_location + company_size, 
+                               data = test_data)[, -1]  # Exclude intercept
+
+# Ensure the same columns are present in the test set (if necessary)
+missing_cols <- setdiff(colnames(train_dummies), colnames(test_dummies))
+if (length(missing_cols) > 0) {
+  test_dummies <- cbind(test_dummies, matrix(0, nrow = nrow(test_dummies), ncol = length(missing_cols)))
+  colnames(test_dummies)[(ncol(test_dummies) - length(missing_cols) + 1):ncol(test_dummies)] <- missing_cols
+}
+
+# Linear Regression predictions on the test set
+lm_predictions <- predict(lm_model, newdata = as.data.frame(test_dummies))
+lm_rmse <- RMSE(lm_predictions, test_data$salary_in_usd)
+lm_r2 <- R2(lm_predictions, test_data$salary_in_usd)
+
+# Print model performance metrics
+cat(paste0("Linear Regression RMSE: ", round(lm_rmse, 2), "\n"))
+cat(paste0("Linear Regression R-squared: ", round(lm_r2, 2), "\n"))
+
+# Visual 
+
+# Create a data frame for actual vs predicted salaries
+results_df <- data.frame(
+  Actual = test_data$salary_in_usd,
+  Predicted = lm_predictions,
+  Residuals = test_data$salary_in_usd - lm_predictions
+)
+
+# Plot 1: Actual vs Predicted Salaries
+ggplot(results_df, aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.6, color = "blue") +  # Scatter plot of actual vs predicted
+  geom_abline(slope = 1, intercept = 0, color = "red") +  # Reference line for ideal predictions
+  labs(title = "Actual vs. Predicted Salaries",
+       x = "Actual Salaries (USD)",
+       y = "Predicted Salaries (USD)") +
+  theme_minimal()
+
+# Plot 2: Residuals vs Predicted Salaries
+ggplot(results_df, aes(x = Predicted, y = Residuals)) +
+  geom_point(alpha = 0.6, color = "green") +  # Scatter plot of residuals
+  geom_hline(yintercept = 0, color = "red") +  # Reference line at 0 residual
+  labs(title = "Residuals vs. Predicted Salaries",
+       x = "Predicted Salaries (USD)",
+       y = "Residuals (USD)") +
+  theme_minimal()
+
+# ========================
+# 10. Clustering (Unsupervised Learning)
+# ========================
+
+# Scale the numeric data for clustering
+scaled_data <- scale(numeric_data)
+
+# K-Means clustering with 3 clusters
+kmeans_model <- kmeans(scaled_data, centers = 3, nstart = 25)
+
+# Visualize clusters
+fviz_cluster(kmeans_model, data = scaled_data, geom = "point", ellipse.type = "convex") +
+  labs(title = "K-Means Clustering of Salary Data") +
+  theme_minimal()
+
+# The application of K-Means clustering was visualized through a clustering plot, which revealed the presence of three distinct clusters within the salary data. The clusters represent natural groupings of salary profiles based on similarities in the data, allowing for a more nuanced understanding of different salary segments.
+
+# ========================
+# 11. Hypothesis Testing (T-test)
+# ========================
+# Perform a t-test for salary difference between US and Offshore
+us_salaries <- data_clean %>% filter(is_US == "US") %>% pull(salary_in_usd)
+offshore_salaries <- data_clean %>% filter(is_US == "Offshore") %>% pull(salary_in_usd)
+
+t_test_result <- t.test(us_salaries, offshore_salaries)
+print(t_test_result)
+
+# ========================
+# Visualization of T-test Results
+# ========================
+
+# Combine salaries into a single data frame for visualization
+salary_data <- data_clean %>%
+  select(salary_in_usd, is_US)  # Select relevant columns
+
+# Create a box plot to compare salaries
+ggplot(salary_data, aes(x = is_US, y = salary_in_usd, fill = is_US)) +
+  geom_boxplot(outlier.colour = "orange", outlier.size = 1.5) +  # Box plot with outliers
+  labs(title = "Salary Comparison Between U.S. and Offshore Employees",
+       x = "Employee Location",
+       y = "Salary in USD") +
+  scale_fill_manual(values = c("US" = "#4F9DCB", "Offshore" = "#B0C4DE")) +  
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend
+
+# t-test was used to analyze the difference in mean salaries between U.S. and offshore employees; revealing a significant difference, with U.S. employees earning more on average.
+
+# ========================
+# 12. Conclusion: Summarizing Insights
+# ========================
+
+# Bullets
+
+# Experience level is a key determinant of salary, with more experienced professionals earning significantly higher wages.
+
+# U.S.-based employees earn considerably more than offshore employees, showing a clear geographical disparity.
+
+# Larger companies tend to offer higher salaries compared to small and medium-sized firms.
+
+#Fully remote positions are associated with higher salaries, suggesting that offering remote work may help attract higher-paid talent.
+
+#Random Forest model performed best in predicting salaries, highlighting experience level and employment type as the most important factors.
+
+#Support Vector Machine (SVM) was less effective for salary prediction, with higher error rates.
+
+#Clustering analysis revealed three distinct groups within the salary data, offering insights into natural salary segmentation.
+
+#T-test confirmed a significant difference between U.S. and offshore salaries, reinforcing the need for careful salary planning based on location.
+
+#Recommendations
+
+#Prioritize experience and full-time roles in salary decisions.
+
+#Consider offering remote work to attract top talent.
+
+#Acknowledge and plan for higher salary costs in the U.S. market while leveraging offshore opportunities for cost efficiency.
+
+
+#Explanation 
+
+# The analysis for data science salaries provided insights for determining competitive salary ranges. Results indicate that salaries are impacted by several factors, including experience level, company size, and the location of employees. U.S.-based employees command higher salaries than their offshore counterparts, and experience remains a key determinant of pay. Results indicate that larger companies generally offer higher compensation, and the trend toward fully remote work suggests that offering remote positions could attract higher-paid talent.
+
+#From the modeling techniques applied, the Random Forest model outperformed others, highlighting the importance of experience level and employment type in salary predictions. In contrast, Support Vector Machines were less accurate for this analysis. The clustering analysis also revealed distinct groups within the salary data, offering additional insights into natural salary segments.
+
+#Given these findings, the company should prioritize experience and full-time positions when making salary decisions, with focus on a competitive U.S. market. Providing remote work options could also attract top talent while balancing costs between U.S. and offshore teams.
+
+
+```
+
